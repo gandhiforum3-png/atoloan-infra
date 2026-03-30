@@ -1,0 +1,13 @@
+# ── Part 1: Reserve 2GB of persistent storage ──────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgdata-pvc
+  namespace: atoloan-postgres
+spec:
+  accessModes:
+    - ReadWriteOnce  
+  storageClassName: standard       # one pod can read/write at a time
+  resources:
+    requests:
+      storage: 3Gi
