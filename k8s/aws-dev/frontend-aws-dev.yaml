@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atoloan-ui
+  namespace: atoloan-frontend-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atoloan-ui
+  template:
+    metadata:
+      labels:
+        app: atoloan-ui
+    spec:
+      containers:
+      - name: atoloan-ui
+        image: gandhiforum3/atoloan-ui:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atoloan-ui
+  namespace: atoloan-frontend-dev
+spec:
+  selector:
+    app: atoloan-ui
+  ports:
+  - port: 80
+    targetPort: 80

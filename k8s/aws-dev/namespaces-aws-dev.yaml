@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atoloan-postgres-dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atoloan-backend-dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atoloan-frontend-dev
