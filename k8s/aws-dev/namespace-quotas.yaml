@@ -38,10 +38,10 @@ metadata:
   namespace: atoloan-frontend-dev
 spec:
   hard:
-    requests.cpu: "250m"
-    requests.memory: 256Mi
-    limits.cpu: "500m"
-    limits.memory: 512Mi
+    requests.cpu: "400m"
+    requests.memory: 384Mi
+    limits.cpu: "700m"
+    limits.memory: 640Mi
     pods: "5"
     services: "5"
     secrets: "10"

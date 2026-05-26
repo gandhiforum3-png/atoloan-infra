@@ -25,6 +25,12 @@ variable "your_ip" {
   default     = "0.0.0.0/0"   # ← replace with your IP for security e.g. "1.2.3.4/32"
 }
 
+variable "key_path" {
+  description = "Local path to the EC2 SSH private key (.pem file)"
+  type        = string
+  default     = "~/Downloads/atoloan-dev.pem"
+}
+
 # ── Data: Latest Ubuntu 22.04 AMI ────────────────────────────────────────────
 
 data "aws_ami" "ubuntu" {
@@ -71,6 +77,14 @@ resource "aws_security_group" "atoloan_k8s_dev" {
     description = "k3s API (kubectl from Mac)"
     from_port   = 6443
     to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = [var.your_ip]
+  }
+
+  ingress {
+    description = "Postgres NodePort (DBeaver access)"
+    from_port   = 30432
+    to_port     = 30432
     protocol    = "tcp"
     cidr_blocks = [var.your_ip]
   }
@@ -167,13 +181,20 @@ resource "null_resource" "deploy_k8s_manifests" {
   provisioner "local-exec" {
     command = <<-EOT
       # Wait for k3s and helm add-ons to finish installing
-      sleep 120
+      sleep 180
 
       # Copy kubeconfig
-      scp -o StrictHostKeyChecking=no -i ~/Downloads/atoloan-dev.pem \
+      mkdir -p ~/.kube
+      scp -o StrictHostKeyChecking=no -i ${var.key_path} \
         ubuntu@${aws_eip.atoloan_k8s_dev.public_ip}:/etc/rancher/k3s/k3s.yaml \
         ~/.kube/config-aws-dev
       sed -i '' 's/127.0.0.1/${aws_eip.atoloan_k8s_dev.public_ip}/g' ~/.kube/config-aws-dev
+
+      # Wait for webhooks to be ready before applying their CRDs
+      KUBECONFIG=~/.kube/config-aws-dev kubectl rollout status deployment/external-secrets-webhook \
+        -n external-secrets --timeout=120s
+      KUBECONFIG=~/.kube/config-aws-dev kubectl rollout status deployment/cert-manager-webhook \
+        -n cert-manager --timeout=120s
 
       # Patch nginx ingress with private IP so ingress gets an address
       KUBECONFIG=~/.kube/config-aws-dev kubectl patch svc ingress-nginx-controller \
@@ -187,10 +208,36 @@ resource "null_resource" "deploy_k8s_manifests" {
       KUBECONFIG=~/.kube/config-aws-dev kubectl apply -f ../k8s/aws-dev/postgres-external-secret-aws-dev.yaml
       KUBECONFIG=~/.kube/config-aws-dev kubectl apply -f ../k8s/aws-dev/postgres-storage-aws.yaml
       KUBECONFIG=~/.kube/config-aws-dev kubectl apply -f ../k8s/aws-dev/postgres-aws-dev.yaml
+      KUBECONFIG=~/.kube/config-aws-dev kubectl apply -f ../k8s/aws-dev/postgres-nodeport-aws-dev.yaml
       KUBECONFIG=~/.kube/config-aws-dev kubectl apply -f ../k8s/aws-dev/frontend-aws-dev.yaml
       KUBECONFIG=~/.kube/config-aws-dev kubectl apply -f ../k8s/aws-dev/cert-manager-issuer.yaml
       KUBECONFIG=~/.kube/config-aws-dev kubectl apply -f ../k8s/aws-dev/frontend-ingress.yaml
       KUBECONFIG=~/.kube/config-aws-dev kubectl apply -f ../k8s/aws-dev/backend-ingress.yaml
+
+      # ── Health checks — fail terraform if anything is not ready ──────────────
+
+      echo "Waiting for postgres to be ready..."
+      KUBECONFIG=~/.kube/config-aws-dev kubectl rollout status deployment/postgres \
+        -n atoloan-postgres-dev --timeout=120s
+
+      echo "Waiting for frontend to be ready..."
+      KUBECONFIG=~/.kube/config-aws-dev kubectl rollout status deployment/atoloan-ui \
+        -n atoloan-frontend-dev --timeout=120s
+
+      echo "Checking ExternalSecret synced..."
+      KUBECONFIG=~/.kube/config-aws-dev kubectl wait externalsecret/postgres-secrets \
+        -n atoloan-postgres-dev \
+        --for=condition=Ready --timeout=60s
+
+      echo "Checking postgres-secret exists..."
+      KUBECONFIG=~/.kube/config-aws-dev kubectl get secret postgres-secret \
+        -n atoloan-postgres-dev
+
+      echo ""
+      echo "All systems go. Summary:"
+      KUBECONFIG=~/.kube/config-aws-dev kubectl get pods -A \
+        --field-selector=status.phase!=Running,status.phase!=Succeeded \
+        | grep -v "^NAMESPACE" && echo "WARNING: some pods not Running" || echo "All pods healthy"
     EOT
   }
 }
@@ -207,9 +254,9 @@ output "public_ip" {
 }
 
 output "ssh_command" {
-  value = "ssh -i ~/Downloads/atoloan-dev.pem ubuntu@${aws_eip.atoloan_k8s_dev.public_ip}"
+  value = "ssh -i ${var.key_path} ubuntu@${aws_eip.atoloan_k8s_dev.public_ip}"
 }
 
 output "kubeconfig_command" {
-  value = "scp -i ~/Downloads/atoloan-dev.pem ubuntu@${aws_eip.atoloan_k8s_dev.public_ip}:/etc/rancher/k3s/k3s.yaml ~/.kube/config-aws-dev && sed -i '' 's/127.0.0.1/${aws_eip.atoloan_k8s_dev.public_ip}/g' ~/.kube/config-aws-dev"
+  value = "scp -i ${var.key_path} ubuntu@${aws_eip.atoloan_k8s_dev.public_ip}:/etc/rancher/k3s/k3s.yaml ~/.kube/config-aws-dev && sed -i '' 's/127.0.0.1/${aws_eip.atoloan_k8s_dev.public_ip}/g' ~/.kube/config-aws-dev"
 }
