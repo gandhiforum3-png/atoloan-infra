@@ -1,0 +1,70 @@
+# NOTE: Verify before applying:
+#   image       — update tag if needed (currently :latest)
+#   containerPort — change 8080 if your backend listens on a different port
+#   env keys    — PGUSER/PGPASSWORD/etc. must match what your app reads
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atoloan-api
+  namespace: atoloan-backend-uat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atoloan-api
+  template:
+    metadata:
+      labels:
+        app: atoloan-api
+    spec:
+      containers:
+      - name: atoloan-api
+        image: gandhiforum3/atoloan-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: rds-secret
+              key: PGUSER
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rds-secret
+              key: PGPASSWORD
+        - name: PGDATABASE
+          valueFrom:
+            secretKeyRef:
+              name: rds-secret
+              key: PGDATABASE
+        - name: PGHOST
+          valueFrom:
+            secretKeyRef:
+              name: rds-secret
+              key: PGHOST
+        - name: PGPORT
+          valueFrom:
+            secretKeyRef:
+              name: rds-secret
+              key: PGPORT
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atoloan-api
+  namespace: atoloan-backend-uat
+spec:
+  selector:
+    app: atoloan-api
+  ports:
+  - port: 80
+    targetPort: 8080

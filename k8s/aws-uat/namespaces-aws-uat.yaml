@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atoloan-backend-uat
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: atoloan-frontend-uat

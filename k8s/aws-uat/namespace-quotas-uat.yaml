@@ -1,0 +1,35 @@
+# Resource quotas for UAT: 2x t3.small = 4 vCPU / 4 GB RAM total.
+# k3s system + ingress + cert-manager overhead ~1 vCPU / 1.5 GB, leaving
+# ~3 vCPU / 2.5 GB for application workloads.
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: backend-quota
+  namespace: atoloan-backend-uat
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
+    pods: "10"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: frontend-quota
+  namespace: atoloan-frontend-uat
+spec:
+  hard:
+    requests.cpu: "500m"
+    requests.memory: 512Mi
+    limits.cpu: "1"
+    limits.memory: 1Gi
+    pods: "5"
+    services: "5"
+    secrets: "10"
+    configmaps: "10"
