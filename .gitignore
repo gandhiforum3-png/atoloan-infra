@@ -1,7 +1,7 @@
 .claude/
 
-# Terraform
-infrastructure/.terraform/
+# Terraform — provider binaries and state files (covers all nested modules)
+**/.terraform/
 infrastructure/.terraform.lock.hcl
 infrastructure/terraform.tfstate
 infrastructure/terraform.tfstate.backup
