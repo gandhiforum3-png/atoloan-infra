@@ -1,0 +1,42 @@
+# LOCAL MINIKUBE ONLY — do not apply on AWS environments
+#
+# WARNING: The two IPs below change on every minikube restart.
+# After restarting minikube, run scripts/fix-coredns-local.sh
+# to auto-update these IPs and re-apply this file.
+#
+# To get them manually:
+#   nginx ClusterIP:       kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.spec.clusterIP}'
+#   host.minikube.internal: minikube ssh "cat /etc/hosts" | grep host.minikube.internal
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns
+  namespace: kube-system
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health {
+           lameduck 5s
+        }
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+           pods insecure
+           fallthrough in-addr.arpa ip6.arpa
+           ttl 30
+        }
+        hosts {
+           10.109.229.89 dev.atoloan.api.com
+           10.109.229.89 dev.atoloan.com
+           192.168.65.254 host.minikube.internal
+           fallthrough
+        }
+        prometheus :9153
+        forward . /etc/resolv.conf {
+           max_concurrent 1000
+        }
+        cache 30
+        loop
+        reload
+        loadbalance
+    }
