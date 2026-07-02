@@ -55,10 +55,10 @@ spec:
     name: atoloan-openai-secret
     creationPolicy: Owner
   data:
-    - secretKey: OPENAI_API_KEY
+    - secretKey: ANTHROPIC_API_KEY
       remoteRef:
         key: atoloan/openai
-        property: OPENAI_API_KEY
+        property: ANTHROPIC_API_KEY
 
 ---
 apiVersion: external-secrets.io/v1
@@ -251,11 +251,11 @@ spec:
                 secretKeyRef:
                   name: atoloan-postgres-secret
                   key: PGDATABASE
-            - name: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: atoloan-openai-secret
-                  key: OPENAI_API_KEY
+                  key: ANTHROPIC_API_KEY
             - name: SEVENCREDIT_ACCOUNT
               valueFrom:
                 secretKeyRef:
@@ -346,6 +346,10 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
     nginx.ingress.kubernetes.io/enable-cors: "false"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
 spec:
   ingressClassName: nginx
   tls:
