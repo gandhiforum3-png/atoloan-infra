@@ -100,7 +100,10 @@ resource "aws_security_group" "atoloan_k8s_dev" {
 # ── EC2 Instance ──────────────────────────────────────────────────────────────
 
 resource "aws_instance" "atoloan_k8s_dev" {
-  ami                    = data.aws_ami.ubuntu.id
+  # Pinned (not data.aws_ami.ubuntu.id) — most_recent AMI lookups drift over
+  # time as Canonical publishes patches, which forces a destroy+recreate of
+  # this instance on the next unrelated apply. Update deliberately if needed.
+  ami                    = "ami-0cf6185a5bb26f705" # Ubuntu 22.04 jammy amd64, pinned 2026-07-02
   instance_type          = "t3.small"
   key_name               = var.key_pair_name
   vpc_security_group_ids = [aws_security_group.atoloan_k8s_dev.id]

@@ -5,6 +5,8 @@ metadata:
   namespace: atoloan-frontend-uat
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: atoloan-ui
@@ -15,7 +17,7 @@ spec:
     spec:
       containers:
       - name: atoloan-ui
-        image: gandhiforum3/atoloan-ui:latest
+        image: gandhiforum3/atoloan-ui:uat-s3
         imagePullPolicy: Always
         ports:
         - containerPort: 80

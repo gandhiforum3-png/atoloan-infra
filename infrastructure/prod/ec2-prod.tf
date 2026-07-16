@@ -105,7 +105,10 @@ resource "aws_security_group" "atoloan_k8s_prod" {
 # ── k3s Server (control plane + ingress entry point) ─────────────────────────
 
 resource "aws_instance" "atoloan_k8s_prod_server" {
-  ami                    = data.aws_ami.ubuntu.id
+  # Pinned (not data.aws_ami.ubuntu.id) — most_recent AMI lookups drift over
+  # time as Canonical publishes patches, which forces a destroy+recreate of
+  # this instance on the next unrelated apply. Update deliberately if needed.
+  ami                    = "ami-0063861063744e26c" # matches currently running instance, pinned 2026-07-02
   instance_type          = "t3.small"
   key_name               = var.key_pair_name
   subnet_id              = aws_subnet.atoloan_prod_public_a.id
@@ -165,7 +168,8 @@ resource "aws_instance" "atoloan_k8s_prod_server" {
 # ── k3s Agent (worker node) ───────────────────────────────────────────────────
 
 resource "aws_instance" "atoloan_k8s_prod_agent" {
-  ami                    = data.aws_ami.ubuntu.id
+  # Pinned (not data.aws_ami.ubuntu.id) — see comment on atoloan_k8s_prod_server above.
+  ami                    = "ami-0063861063744e26c" # matches currently running instance, pinned 2026-07-02
   instance_type          = "t3.small"
   key_name               = var.key_pair_name
   subnet_id              = aws_subnet.atoloan_prod_public_b.id
@@ -202,7 +206,12 @@ resource "aws_instance" "atoloan_k8s_prod_agent" {
   }
 }
 
-# ── Elastic IP ────────────────────────────────────────────────────────────────
+# ── Elastic IPs ───────────────────────────────────────────────────────────────
+# Both nodes get a stable Elastic IP. Pods can be scheduled on either node, and
+# outbound calls to IP-allowlisted third parties (e.g. 700Credit) need a fixed,
+# known source IP regardless of which node they egress through — without this,
+# the agent node's IP is just an ephemeral AWS-assigned address that changes on
+# instance stop/start, silently breaking any allowlist entry for it.
 
 resource "aws_eip" "atoloan_k8s_prod" {
   instance = aws_instance.atoloan_k8s_prod_server.id
@@ -210,6 +219,17 @@ resource "aws_eip" "atoloan_k8s_prod" {
 
   tags = {
     Name        = "atoloan-k8s-prod-eip"
+    Environment = "prod"
+    Project     = "atoloan"
+  }
+}
+
+resource "aws_eip" "atoloan_k8s_prod_agent" {
+  instance = aws_instance.atoloan_k8s_prod_agent.id
+  domain   = "vpc"
+
+  tags = {
+    Name        = "atoloan-k8s-prod-agent-eip"
     Environment = "prod"
     Project     = "atoloan"
   }
@@ -298,6 +318,11 @@ output "prod_agent_id" {
 output "prod_public_ip" {
   description = "Elastic IP — already pointed at atoloans.com via Route 53"
   value       = aws_eip.atoloan_k8s_prod.public_ip
+}
+
+output "prod_agent_public_ip" {
+  description = "Elastic IP for the agent node — give this + prod_public_ip to third parties that IP-allowlist (e.g. 700Credit)"
+  value       = aws_eip.atoloan_k8s_prod_agent.public_ip
 }
 
 output "prod_rds_endpoint" {

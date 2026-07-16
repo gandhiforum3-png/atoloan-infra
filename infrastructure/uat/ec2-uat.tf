@@ -111,7 +111,10 @@ resource "aws_security_group" "atoloan_k8s_uat" {
 # ── k3s Server (control plane + ingress entry point) ─────────────────────────
 
 resource "aws_instance" "atoloan_k8s_uat_server" {
-  ami                    = data.aws_ami.ubuntu.id
+  # Pinned (not data.aws_ami.ubuntu.id) — most_recent AMI lookups drift over
+  # time as Canonical publishes patches, which forces a destroy+recreate of
+  # this instance on the next unrelated apply. Update deliberately if needed.
+  ami                    = "ami-0cf6185a5bb26f705" # matches currently running instance, pinned 2026-07-02
   instance_type          = "t3.small"
   key_name               = var.key_pair_name
   subnet_id              = aws_subnet.atoloan_uat_public_a.id
@@ -177,7 +180,8 @@ resource "aws_instance" "atoloan_k8s_uat_server" {
 # ── k3s Agent (worker node) ───────────────────────────────────────────────────
 
 resource "aws_instance" "atoloan_k8s_uat_agent" {
-  ami                    = data.aws_ami.ubuntu.id
+  # Pinned (not data.aws_ami.ubuntu.id) — see comment on atoloan_k8s_uat_server above.
+  ami                    = "ami-0cf6185a5bb26f705" # matches currently running instance, pinned 2026-07-02
   instance_type          = "t3.small"
   key_name               = var.key_pair_name
   subnet_id              = aws_subnet.atoloan_uat_public_b.id

@@ -1,14 +1,65 @@
-# NOTE: Verify before applying:
-#   image       — update tag if needed (currently :latest)
-#   containerPort — change 8080 if your backend listens on a different port
-#   env keys    — PGUSER/PGPASSWORD/etc. must match what your app reads
+# ─────────────────────────────────────────────────────────────────────────────
+# ConfigMap — non-secret configuration (uat-aws)
+# PG vars are omitted here — they come from rds-secret
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atoloan-api-config
+  namespace: atoloan-backend-uat
+data:
+  APP_ENV: "uat"
+  SEVENCREDIT_ENV: "test"
+  CORS_ORIGINS: "http://uat.atoloan.com,https://uat.atoloan.com"
+  AWS_REGION: "us-east-2"
+  S3_BUCKET_NAME: "atoloan-user-documents-uat"
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PersistentVolumeClaims — local-path (k3s default storage class)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: upload-pdfs
+  namespace: atoloan-backend-uat
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: user-docs
+  namespace: atoloan-backend-uat
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Deployment (uat-aws)
+# ─────────────────────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: atoloan-api
   namespace: atoloan-backend-uat
+  labels:
+    app: atoloan-api
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: atoloan-api
@@ -17,46 +68,165 @@ spec:
       labels:
         app: atoloan-api
     spec:
+      initContainers:
+        - name: db-migrate
+          image: gandhiforum3/atoloan-api:uat-s3
+          imagePullPolicy: Always
+          command: ["python", "scripts/run_migrations.py"]
+          envFrom:
+            - configMapRef:
+                name: atoloan-api-config
+          env:
+            - name: PGHOST
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGHOST
+            - name: PGPORT
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGPORT
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGDATABASE
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGUSER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGPASSWORD
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+
       containers:
-      - name: atoloan-api
-        image: gandhiforum3/atoloan-api:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8080
-        env:
-        - name: PGUSER
-          valueFrom:
-            secretKeyRef:
-              name: rds-secret
-              key: PGUSER
-        - name: PGPASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: rds-secret
-              key: PGPASSWORD
-        - name: PGDATABASE
-          valueFrom:
-            secretKeyRef:
-              name: rds-secret
-              key: PGDATABASE
-        - name: PGHOST
-          valueFrom:
-            secretKeyRef:
-              name: rds-secret
-              key: PGHOST
-        - name: PGPORT
-          valueFrom:
-            secretKeyRef:
-              name: rds-secret
-              key: PGPORT
-        resources:
-          requests:
-            cpu: 200m
-            memory: 256Mi
-          limits:
-            cpu: 1000m
-            memory: 1Gi
+        - name: atoloan-api
+          image: gandhiforum3/atoloan-api:uat-s3
+          imagePullPolicy: Always
+
+          command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+          ports:
+            - containerPort: 8000
+
+          # Non-secret config from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: atoloan-api-config
+
+          # Secrets
+          env:
+            # Postgres — from rds-secret (managed by infra repo)
+            - name: PGHOST
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGHOST
+            - name: PGPORT
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGPORT
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGDATABASE
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGUSER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rds-secret
+                  key: PGPASSWORD
+            # OpenAI — from AWS Secrets Manager via ESO
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atoloan-openai-secret
+                  key: OPENAI_API_KEY
+            # Anthropic — from AWS Secrets Manager via ESO
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atoloan-anthropic-secret
+                  key: ANTHROPIC_API_KEY
+            # SevenCredit — from AWS Secrets Manager via ESO
+            - name: SEVENCREDIT_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: atoloan-sevencredit-secret
+                  key: SEVENCREDIT_ACCOUNT
+            - name: SEVENCREDIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: atoloan-sevencredit-secret
+                  key: SEVENCREDIT_PASSWORD
+            - name: SEVENCREDIT_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: atoloan-sevencredit-secret
+                  key: SEVENCREDIT_CLIENT_ID
+            - name: SEVENCREDIT_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atoloan-sevencredit-secret
+                  key: SEVENCREDIT_CLIENT_SECRET
+
+          volumeMounts:
+            - name: upload-pdfs
+              mountPath: /app/upload_pdf
+            - name: user-docs
+              mountPath: /app/user_uploaded_documents
+
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "750m"
+              memory: "768Mi"
+
+          readinessProbe:
+            httpGet:
+              path: /hello
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /hello
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+      volumes:
+        - name: upload-pdfs
+          persistentVolumeClaim:
+            claimName: upload-pdfs
+        - name: user-docs
+          persistentVolumeClaim:
+            claimName: user-docs
+
 ---
+# ─────────────────────────────────────────────────────────────────────────────
+# Service
+# ─────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:
@@ -66,5 +236,7 @@ spec:
   selector:
     app: atoloan-api
   ports:
-  - port: 80
-    targetPort: 8080
+    - name: http
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
